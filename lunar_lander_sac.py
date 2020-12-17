@@ -1,17 +1,11 @@
 import csv
-from datetime import datetime, timedelta
-import os
+from datetime import timedelta
 import time
 import gym
 import numpy as np
 import torch
-
 from sac_agent import Agent
 from utils import plot_learning_curve, plot_actions, get_config, get_plot_and_chkpt_dir, reward_function, plot
-
-load_checkpoint = False
-load_checkpoint_name = "sac_20201216_17-25-51"
-use_custom_reward = True
 
 
 def main():
@@ -19,7 +13,7 @@ def main():
     config = get_config()
     # creating environment
     env = gym.make(config['game']['env_name'])
-    if not use_custom_reward:
+    if not config['SAC']['use_custom_reward']:
         print("Reward Threshold: " + str(env.spec.reward_threshold))
 
     random_seed = None
@@ -27,7 +21,8 @@ def main():
         torch.manual_seed(random_seed)
         env.seed(random_seed)
 
-    chkpt_dir, plot_dir, timestamp = get_plot_and_chkpt_dir(load_checkpoint, load_checkpoint_name)
+    chkpt_dir, plot_dir, timestamp = get_plot_and_chkpt_dir(config['game']['load_checkpoint'],
+                                                            config['game']['checkpoint_name'])
     # sac = Agent(input_dims=env.observation_space.shape, env=env,
     #             n_actions=env.action_space.shape[0], max_size=buffer_memory_size, gamma=gamma, tau=tau,
     #             update_interval=learn_every_n_steps, layer1_size=layer1_size, layer2_size=layer2_size,
@@ -42,28 +37,27 @@ def main():
     avg_length = 0
     timestep = 0
     total_steps = 0
-    start_training_step = 400
-    mean_q1, mean_q2, entropies = 0, 0, 0
+
     training_epochs_per_update = 128
     action_history = []
     score_history = []
     episode_duration_list = []
     length_list = []
     info = {}
-    if load_checkpoint:
+    if config['game']['load_checkpoint']:
         sac.load_models()
         # env.render(mode='human')
 
-    # training loop
     max_episodes = config['Experiment']['max_episodes']
     max_timesteps = config['Experiment']['max_timesteps']
     start_experiment = time.time()
+    # training loop
     for i_episode in range(1, max_episodes + 1):
         observation = env.reset()
         timedout = False
+        episode_reward = 0
         start = time.time()
-        for t in range(max_timesteps):
-            timestep += 1
+        for timestep in range(max_timesteps):
             total_steps += 1
 
             # if total_steps < start_training_step:  # Pure exploration
@@ -80,10 +74,10 @@ def main():
             if timestep == max_timesteps:
                 timedout = True
 
-            if use_custom_reward:
+            if config['SAC']['use_custom_reward']:
                 reward, done = reward_function(env, observation_, timedout)
             sac.remember(observation, action, reward, observation_, done)
-            if not load_checkpoint:
+            if not config['game']['test_model']:
                 sac.learn()
             observation = observation_
 
@@ -94,7 +88,7 @@ def main():
                 env.render()
 
             n_epoch_every_update = config['Experiment']['n_epoch_every_update']
-            if total_steps >= start_training_step and total_steps % sac.update_interval == 0:
+            if total_steps >= config['Experiment']['start_training_step'] and total_steps % sac.update_interval == 0:
                 for e in range(n_epoch_every_update):
                     sac.learn()
                     # sac.soft_update_target()
@@ -103,6 +97,7 @@ def main():
             #     sac.soft_update_target()
 
             running_reward += reward
+            episode_reward += reward
             # if render:
             #     env.render()
             if done:
@@ -111,30 +106,30 @@ def main():
         end = time.time()
         episode_duration = end - start
         episode_duration_list.append(episode_duration)
-        score_history.append(running_reward)
+        score_history.append(episode_reward)
 
         avg_ep_duration = np.mean(episode_duration_list[-100:])
         avg_score = np.mean(score_history[-100:])
 
         if avg_score > best_score:
             best_score = avg_score
-            if not load_checkpoint:
+            if not config['game']['test_model']:
                 sac.save_models()
         # for e in range(training_epochs_per_update):
         #     sac.learn()
         #     sac.soft_update_target()
-        length_list.append(t)
-        avg_length += t
+        length_list.append(timestep)
+        avg_length += timestep
 
         # logging
         log_interval = config['Experiment']['log_interval']
         if i_episode % log_interval == 0:
-            # print("mean_q1 {}  mean_q2 {}  entropy {}".format(mean_q1, mean_q2, 0))
             avg_length = int(avg_length / log_interval)
             running_reward = int((running_reward / log_interval))
 
-            print('Episode {} \t avg length: {} \t reward: {} \t Best Score: {} \t avg episode duration: {}'.format(
-                i_episode, avg_length, running_reward, best_score, timedelta(seconds=avg_ep_duration)))
+            print('Episode {} \t avg length: {} \t Total reward(last {} episodes): {} \t Best Score: {} \t avg '
+                  'episode duration: {}'.format(i_episode, avg_length, log_interval, running_reward, best_score,
+                                                timedelta(seconds=avg_ep_duration)))
             running_reward = 0
             avg_length = 0
     end_experiment = time.time()
@@ -142,7 +137,7 @@ def main():
     info['experiment_duration'] = experiment_duration
     print('Total Experiment time: {}'.format(experiment_duration))
 
-    if not load_checkpoint:
+    if not config['game']['test_model']:
         x = [i + 1 for i in range(len(score_history))]
         np.savetxt('tmp/sac_' + timestamp + '/scores.csv', np.asarray(score_history), delimiter=',')
 
@@ -150,13 +145,11 @@ def main():
         action_main = actions[0].flatten()
         action_side = actions[1].flatten()
         x_actions = [i + 1 for i in range(len(action_side))]
-
+        # Save logs in files
         np.savetxt('tmp/sac_' + timestamp + '/action_main.csv', action_main, delimiter=',')
-
         np.savetxt('tmp/sac_' + timestamp + '/action_side.csv', action_side, delimiter=',')
         np.savetxt('tmp/sac_' + timestamp + '/epidode_durations.csv', np.asarray(episode_duration_list), delimiter=',')
         np.savetxt('tmp/sac_' + timestamp + '/avg_length_list.csv', np.asarray(length_list), delimiter=',')
-
         w = csv.writer(open('tmp/sac_' + timestamp + '/rest_info.csv', "w"))
         for key, val in info.items():
             w.writerow([key, val])

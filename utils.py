@@ -44,6 +44,7 @@ def get_plot_and_chkpt_dir(load_checkpoint, load_checkpoint_name):
         else:
             os.makedirs(chkpt_dir)
     else:
+        print("Loading Model from checkpoint {}".format(load_checkpoint_name))
         chkpt_dir = 'tmp/' + load_checkpoint_name
 
     plot_dir = 'plots/sac_' + timestamp

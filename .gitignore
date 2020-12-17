@@ -1,4 +1,4 @@
 /venv/
 /sac_discrete_lunar.py
-/plots/sac_*
-/tmp/sac_*
+/plots/*
+/tmp/*

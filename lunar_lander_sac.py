@@ -32,6 +32,8 @@ def main():
 
     # best_score = env.reward_range[0]
     best_score = -100
+    best_score_episode = -1
+    best_score_length = -1
     # logging variables
     running_reward = 0
     avg_length = 0
@@ -113,6 +115,8 @@ def main():
 
         if avg_score > best_score:
             best_score = avg_score
+            best_score_episode = i_episode
+            best_score_length = timestep
             if not config['game']['test_model']:
                 sac.save_models()
         # for e in range(training_epochs_per_update):
@@ -135,6 +139,10 @@ def main():
     end_experiment = time.time()
     experiment_duration = timedelta(seconds=end_experiment - start_experiment)
     info['experiment_duration'] = experiment_duration
+    info['best_score'] = best_score
+    info['best_score_episode'] = best_score_episode
+    info['best_score_length'] = best_score_length
+
     print('Total Experiment time: {}'.format(experiment_duration))
 
     if not config['game']['test_model']:

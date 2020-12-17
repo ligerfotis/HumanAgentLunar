@@ -1,6 +1,6 @@
 game:
     env_name: "LunarLanderContinuous-v2"
-    render: False
+    render: True
 
     test_model: False # no training
     checkpoint_name: "sac_20201216_17-25-51"
